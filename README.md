@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Netchex New Hire Import (mock)
 
-## Getting Started
+Converts a client's raw employee spreadsheet (xlsx, xls, or csv) into the 68-column Netchex new-hire import CSV, with column mapping and value translation along the way.
 
-First, run the development server:
+## Quickstart
 
-```bash
+```
+git clone <repo>
+cd mock-employee-import
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open <http://localhost:3000>. The app walks through four steps: Upload → Columns → Values → Preview, then downloads the import CSV.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Modules
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `src/lib/netchex-spec.ts` — the 68-field Netchex import spec (labels, order, required/conditional, allowed-value enums, format hints). Single source of truth.
+- `src/lib/parse-excel.ts` / `parse-csv.ts` — server-side file parsing; auto-detects the Data sheet and header row for multi-sheet xlsx.
+- `src/lib/suggest-mapping.ts` — fuzzy + alias matching from client column headers to Netchex fields.
+- `src/lib/value-synonyms.ts` / `state-abbreviations.ts` — built-in synonym maps for Sex, Marital, State, Status, Classification, Contact Method, Y/N, etc.
+- `src/lib/distinct-values.ts` — scans rows for distinct values of a mapped source column (drives the Values step).
+- `src/lib/transform.ts` — pure function: rows × column mapping × value mapping → records + validation issues. Handles date/SSN/zip/phone formatting, full-name splitting, conditional-required validation.
+- `src/lib/csv-export.ts` — serializes records to the Netchex 68-column CSV.
+- `src/context/WorkflowContext.tsx` — client-side workflow state (parsed file, column mapping, value mapping). No persistence between sessions.
+- `src/components/{Stepper,ColumnMapRow,Combobox,EmptyState,PreviewTable}.tsx` — UI primitives for each step.
+- `src/app/(steps)/{upload,columns,values,preview}/page.tsx` — the four step pages.
+- `src/app/api/parse/route.ts` — multipart upload endpoint that delegates to the parsers.
 
-## Learn More
+## Configuration
 
-To learn more about Next.js, take a look at the following resources:
+| Variable | Purpose |
+|---|---|
+| `PAGES_BASE_PATH` | Build-time prefix (e.g. `/mock-employee-import`) when serving from a GitHub Pages project site. Unset for local dev. |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+No runtime services — parsing runs entirely in the browser; no database, no auth, no external APIs.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deployment (GitHub Pages)
 
-## Deploy on Vercel
+`.github/workflows/deploy.yml` builds a static export and deploys to GitHub Pages on every push to `main`. After the first run:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Open the repo's **Settings → Pages**, set Source to **GitHub Actions** (one-time).
+2. Subsequent pushes trigger a build and update the published site.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The `PAGES_BASE_PATH` env var in the workflow must match the repo name (it's the path GH Pages serves the site under).
+
+## Updating the Netchex field spec
+
+When Netchex changes the import format, edit `src/lib/netchex-spec.ts`:
+
+1. Add or remove entries in `NETCHEX_FIELDS` — order must match the export column order exactly.
+2. To preserve a blank column at a given position (like the existing index-47 spacer), set `isSpacer: true` and `label: ""`.
+3. To add an enum-constrained field, set `allowedValues: [...]`. The Values step will auto-render a dropdown.
+4. To add a new built-in synonym for an enum field, edit `src/lib/value-synonyms.ts` `RESOLVERS`.
+5. Update `groupForOrder` in `netchex-spec.ts` if the new field falls outside the existing group ranges.
+6. Run `npm test` — the Poythress golden-file test will catch most accidental shape changes.
+
+## Testing
+
+```
+npm test
+```
+
+Vitest suites in `src/lib/__tests__/`: formatters, end-to-end transform against the Poythress fixture, value-mapping synonyms, name splitting, and conditional validation.

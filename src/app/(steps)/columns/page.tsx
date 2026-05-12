@@ -6,9 +6,9 @@ import { useWorkflow } from "@/context/WorkflowContext";
 import { ColumnMapRow } from "@/components/ColumnMapRow";
 import { EmptyState } from "@/components/EmptyState";
 import {
-  NETCHEX_FIELDS,
   FIELD_GROUPS,
   groupForOrder,
+  newHireFields,
   type FieldGroup,
 } from "@/lib/netchex-spec";
 import { suggestMapping, type FieldSuggestion } from "@/lib/suggest-mapping";
@@ -61,7 +61,7 @@ export default function ColumnsPage() {
     );
   }
 
-  const fields = NETCHEX_FIELDS.filter((f) => !f.isSpacer);
+  const fields = newHireFields();
   const mappedCount = fields.filter(
     (f) =>
       state.columnMapping[f.key]?.source &&
@@ -89,12 +89,15 @@ export default function ColumnsPage() {
     return true;
   });
 
-  // Per-group counts
+  // Per-group counts — skip groups that have no fields in the current
+  // (new-hire) workflow.
   const groupStats = FIELD_GROUPS.map((g) => {
     const groupFields = fields.filter((f) => groupForOrder(f.order) === g);
     const mapped = groupFields.filter(
-      (f) => state.columnMapping[f.key]?.source === "column" ||
-        state.columnMapping[f.key]?.source === "constant",
+      (f) =>
+        state.columnMapping[f.key]?.source === "column" ||
+        state.columnMapping[f.key]?.source === "constant" ||
+        state.columnMapping[f.key]?.source === "dynamic",
     ).length;
     return {
       group: g,
@@ -102,7 +105,7 @@ export default function ColumnsPage() {
       mapped,
       complete: mapped === groupFields.length,
     };
-  });
+  }).filter((s) => s.total > 0);
 
   function scrollToGroup(group: FieldGroup) {
     const first = fields.find((f) => groupForOrder(f.order) === group);

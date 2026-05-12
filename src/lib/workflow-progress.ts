@@ -1,4 +1,4 @@
-import { NETCHEX_FIELDS } from "./netchex-spec";
+import { newHireFields } from "./netchex-spec";
 import { distinctValuesForField } from "./distinct-values";
 import type { ColumnMapping, ValueMapping } from "./types";
 
@@ -9,7 +9,7 @@ export type StepProgress = {
   hint: string; // short status line, e.g. "12/67 mapped"
 };
 
-const REAL_FIELDS = NETCHEX_FIELDS.filter((f) => !f.isSpacer);
+const REAL_FIELDS = newHireFields();
 
 export function computeProgress(input: {
   hasParsed: boolean;

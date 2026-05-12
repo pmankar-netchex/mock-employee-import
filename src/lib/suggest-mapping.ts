@@ -147,6 +147,12 @@ export function suggestMapping(clientHeaders: string[]): {
       autoMapping[field.key] = { source: "unmapped" };
       continue;
     }
+    // Direct deposit fields will be handled in a separate workflow; don't
+    // burn fuzzy-match candidates on them here.
+    if ((field.category ?? "newHire") === "directDeposit") {
+      autoMapping[field.key] = { source: "unmapped" };
+      continue;
+    }
     const s = suggestForField(field.key as NetchexFieldKey, clientHeaders, wrappedFuse);
     suggestions.push(s);
     const pick = s.ranked.find((r) => !used.has(r.column));

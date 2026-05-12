@@ -3,6 +3,7 @@ import type { NetchexFieldKey } from "./netchex-spec";
 export type ColumnMappingEntry =
   | { source: "column"; column: string }
   | { source: "constant"; value: string }
+  | { source: "dynamic"; pool: string; value: string }
   | { source: "unmapped" };
 
 export type ColumnMapping = Record<string, ColumnMappingEntry>;

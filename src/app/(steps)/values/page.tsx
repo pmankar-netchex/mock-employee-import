@@ -4,7 +4,7 @@ import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useWorkflow } from "@/context/WorkflowContext";
 import {
-  NETCHEX_FIELDS,
+  newHireFields,
   type NetchexField,
   type NetchexFieldKey,
 } from "@/lib/netchex-spec";
@@ -12,6 +12,7 @@ import { distinctValuesForField } from "@/lib/distinct-values";
 import { autoResolveValue } from "@/lib/value-synonyms";
 import { Combobox, type ComboboxOption } from "@/components/Combobox";
 import { EmptyState } from "@/components/EmptyState";
+import { getPool } from "@/lib/dynamic-pools";
 
 const UNCONSTRAINED_CODE_FIELDS: readonly NetchexFieldKey[] = [
   "division",
@@ -31,18 +32,18 @@ export default function ValuesPage() {
   const parsed = state.parsed;
 
   const fieldGroups = useMemo(() => {
+    type Kind = "enum" | "freeText" | "pool";
     if (!parsed) return [] as Array<{
       field: NetchexField;
-      kind: "enum" | "freeText";
+      kind: Kind;
       distinct: ReturnType<typeof distinctValuesForField>;
     }>;
     const out: Array<{
       field: NetchexField;
-      kind: "enum" | "freeText";
+      kind: Kind;
       distinct: ReturnType<typeof distinctValuesForField>;
     }> = [];
-    for (const f of NETCHEX_FIELDS) {
-      if (f.isSpacer) continue;
+    for (const f of newHireFields()) {
       const entry = state.columnMapping[f.key];
       if (!entry || entry.source !== "column") continue;
       const distinct = distinctValuesForField(
@@ -53,15 +54,16 @@ export default function ValuesPage() {
       if (distinct.length === 0) continue;
       const isEnum =
         !!f.allowedValues && f.allowedValues.length > 0;
+      const hasPool = !!f.dynamicPools && f.dynamicPools.length > 0;
       const isFreeText = UNCONSTRAINED_CODE_FIELDS.includes(
         f.key as NetchexFieldKey,
       );
-      if (!isEnum && !isFreeText) continue;
-      out.push({
-        field: f,
-        kind: isEnum ? "enum" : "freeText",
-        distinct,
-      });
+      let kind: Kind | null = null;
+      if (isEnum) kind = "enum";
+      else if (hasPool) kind = "pool";
+      else if (isFreeText) kind = "freeText";
+      if (!kind) continue;
+      out.push({ field: f, kind, distinct });
     }
     return out;
   }, [parsed, state.columnMapping]);
@@ -202,7 +204,7 @@ function FieldGroup({
   onChange,
 }: {
   field: NetchexField;
-  kind: "enum" | "freeText";
+  kind: "enum" | "freeText" | "pool";
   distinct: { value: string; count: number }[];
   mapping: Record<string, string>;
   onChange: (clientValue: string, netchexValue: string) => void;
@@ -211,9 +213,27 @@ function FieldGroup({
   const allMapped = mappedCount === distinct.length;
 
   const enumOptions = useMemo<ComboboxOption[]>(() => {
-    if (!field.allowedValues) return [];
-    return field.allowedValues.map((v) => ({ value: v }));
-  }, [field.allowedValues]);
+    if (kind === "enum" && field.allowedValues) {
+      return field.allowedValues.map((v) => ({ value: v }));
+    }
+    if (kind === "pool" && field.dynamicPools) {
+      const merged: ComboboxOption[] = [];
+      for (const id of field.dynamicPools) {
+        const pool = getPool(id);
+        if (!pool) continue;
+        for (const o of pool.options) {
+          merged.push({
+            value: o.code,
+            label: o.label ?? o.code,
+            group: pool.label,
+            hint: o.description,
+          });
+        }
+      }
+      return merged;
+    }
+    return [];
+  }, [kind, field.allowedValues, field.dynamicPools]);
 
   return (
     <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5">
@@ -264,11 +284,11 @@ function FieldGroup({
                 </span>
               </div>
               <span className="text-zinc-400 text-sm">→</span>
-              {kind === "enum" ? (
+              {kind === "enum" || kind === "pool" ? (
                 <Combobox
                   value={mappedTo}
                   options={enumOptions}
-                  placeholder="— pick value —"
+                  placeholder={kind === "pool" ? "— pick from pool —" : "— pick value —"}
                   emptyText="No options."
                   onChange={(v) => onChange(value, v)}
                   onClear={() => onChange(value, "")}

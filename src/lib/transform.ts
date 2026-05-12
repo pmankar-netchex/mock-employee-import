@@ -43,6 +43,7 @@ function rawCell(
   const entry = mapping[key];
   if (!entry || entry.source === "unmapped") return "";
   if (entry.source === "constant") return entry.value;
+  if (entry.source === "dynamic") return entry.value;
   const v = row[entry.column];
   if (v == null) return "";
   if (v instanceof Date) return v.toISOString();

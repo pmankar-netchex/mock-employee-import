@@ -16,7 +16,8 @@ export type FieldGroup =
   | "Tax Withholding"
   | "Position & Schedule"
   | "Contact"
-  | "EEO & Direct Deposit"
+  | "EEO"
+  | "Direct Deposit"
   | "2020 Form W-4";
 
 export const FIELD_GROUPS: readonly FieldGroup[] = [
@@ -27,9 +28,12 @@ export const FIELD_GROUPS: readonly FieldGroup[] = [
   "Tax Withholding",
   "Position & Schedule",
   "Contact",
-  "EEO & Direct Deposit",
+  "EEO",
+  "Direct Deposit",
   "2020 Form W-4",
 ];
+
+export type FieldCategory = "newHire" | "directDeposit";
 
 export type NetchexField = {
   key: string;
@@ -39,6 +43,11 @@ export type NetchexField = {
   conditionalRule?: string;
   format?: string;
   allowedValues?: readonly string[];
+  // IDs from dynamic-pools.ts that this field can pull from in Dynamic mode.
+  dynamicPools?: readonly string[];
+  // Workflow category. "directDeposit" fields stay in the 68-column CSV but
+  // hide from the new-hire import column/value mapping UI.
+  category?: FieldCategory;
   description: string;
   isSpacer?: boolean;
 };
@@ -53,12 +62,21 @@ export function groupForOrder(order: number): FieldGroup {
   if (order <= 34) return "Tax Withholding";
   if (order <= 42) return "Position & Schedule";
   if (order <= 46) return "Contact";
-  if (order <= 58) return "EEO & Direct Deposit";
+  if (order <= 49) return "EEO";
+  if (order <= 58) return "Direct Deposit";
   return "2020 Form W-4";
 }
 
 export function fieldsForGroup(group: FieldGroup): NetchexField[] {
   return NETCHEX_FIELDS.filter((f) => groupForOrder(f.order) === group);
+}
+
+// Fields surfaced in the new-hire workflow UI. DD fields live in the spec but
+// are filled by a future Direct Deposit workflow.
+export function newHireFields(): NetchexField[] {
+  return NETCHEX_FIELDS.filter(
+    (f) => !f.isSpacer && (f.category ?? "newHire") === "newHire",
+  );
 }
 
 export const US_STATE_CODES = [
@@ -96,8 +114,8 @@ export const NETCHEX_FIELDS: readonly NetchexField[] = [
   { key: "stateWithholding", label: "State Withholding", order: 20, required: "required", allowedValues: US_STATE_CODES, description: "State for income tax withholding." },
   { key: "stateUnemployment", label: "State Unemployment", order: 21, required: "required", allowedValues: US_STATE_CODES, description: "State for unemployment insurance." },
   { key: "employeeStatus", label: "Employee Status Code (RFT or RPT)", order: 22, required: "required", allowedValues: ["RFT", "RPT"], description: "RFT = Regular Full Time, RPT = Regular Part Time." },
-  { key: "jobCode", label: "Job Code", order: 23, required: "required", description: "Per-company code." },
-  { key: "payrollGroupCode", label: "Payroll Group Code", order: 24, required: "required", description: "Per-company Payroll Group assigned by Netchex." },
+  { key: "jobCode", label: "Job Code", order: 23, required: "required", dynamicPools: ["workers-comp-codes"], description: "Per-company code." },
+  { key: "payrollGroupCode", label: "Payroll Group Code", order: 24, required: "required", dynamicPools: ["payroll-group-codes"], description: "Per-company Payroll Group assigned by Netchex." },
   { key: "rateAmount", label: "Hourly Rate/Annual Salary Amount", order: 25, required: "required", description: "Hourly rate or annual salary; no $ or commas." },
   { key: "federalMaritalStatus", label: "Federal Marital Status", order: 26, required: "required", allowedValues: ["M", "S"], description: "Federal W-4 filing status: M or S." },
   { key: "federalExemptions", label: "Federal Exemptions", order: 27, required: "required", description: "Number of federal exemptions, no punctuation." },
@@ -143,16 +161,16 @@ export const NETCHEX_FIELDS: readonly NetchexField[] = [
     "Service Workers",
     "Technicians",
   ], description: "EEO-1 job classification." },
-  { key: "ddOrder", label: "Order", order: 50, required: "conditional", conditionalRule: "Required when adding direct deposit; must be \"1\".", allowedValues: ["1"], description: "Direct deposit order." },
-  { key: "ddRoutingNumber", label: "Routing Number", order: 51, required: "conditional", conditionalRule: "Required when adding direct deposit.", description: "Bank routing number." },
-  { key: "ddAccountNumber", label: "Account Number", order: 52, required: "conditional", conditionalRule: "Required when adding direct deposit.", description: "Bank account number." },
+  { key: "ddOrder", label: "Order", order: 50, required: "conditional", conditionalRule: "Required when adding direct deposit; must be \"1\".", allowedValues: ["1"], category: "directDeposit", description: "Direct deposit order." },
+  { key: "ddRoutingNumber", label: "Routing Number", order: 51, required: "conditional", conditionalRule: "Required when adding direct deposit.", category: "directDeposit", description: "Bank routing number." },
+  { key: "ddAccountNumber", label: "Account Number", order: 52, required: "conditional", conditionalRule: "Required when adding direct deposit.", category: "directDeposit", description: "Bank account number." },
   // Netchex template ships this header with a trailing tab character; preserve verbatim.
-  { key: "ddAccountType", label: "Account Type\t", order: 53, required: "conditional", conditionalRule: "Required when adding direct deposit.", allowedValues: ["Checking", "Savings"], description: "Direct deposit account type." },
-  { key: "ddEffectiveDate", label: "Effective Date", order: 54, required: "conditional", conditionalRule: "Required when adding direct deposit.", format: "MM/DD/YYYY", description: "Direct deposit effective date." },
-  { key: "ddStatus", label: "Status", order: 55, required: "conditional", conditionalRule: "Required when adding direct deposit.", allowedValues: ["Deposit", "Prenote"], description: "Direct deposit status." },
-  { key: "ddDepositAmount", label: "Deposit amount", order: 56, required: "conditional", conditionalRule: "Required when adding direct deposit.", allowedValues: ["Balance", "Partial"], description: "Balance or Partial." },
-  { key: "ddPartialAmount", label: "Partial Amount", order: 57, required: "conditional", conditionalRule: "Required when Deposit amount = Partial.", description: "Partial deposit amount value." },
-  { key: "ddPartialAmountType", label: "Partial Amount Type", order: 58, required: "conditional", conditionalRule: "Required when Deposit amount = Partial.", allowedValues: ["Full Dollar", "Percentage"], description: "Full Dollar or Percentage." },
+  { key: "ddAccountType", label: "Account Type\t", order: 53, required: "conditional", conditionalRule: "Required when adding direct deposit.", allowedValues: ["Checking", "Savings"], category: "directDeposit", description: "Direct deposit account type." },
+  { key: "ddEffectiveDate", label: "Effective Date", order: 54, required: "conditional", conditionalRule: "Required when adding direct deposit.", format: "MM/DD/YYYY", category: "directDeposit", description: "Direct deposit effective date." },
+  { key: "ddStatus", label: "Status", order: 55, required: "conditional", conditionalRule: "Required when adding direct deposit.", allowedValues: ["Deposit", "Prenote"], category: "directDeposit", description: "Direct deposit status." },
+  { key: "ddDepositAmount", label: "Deposit amount", order: 56, required: "conditional", conditionalRule: "Required when adding direct deposit.", allowedValues: ["Balance", "Partial"], category: "directDeposit", description: "Balance or Partial." },
+  { key: "ddPartialAmount", label: "Partial Amount", order: 57, required: "conditional", conditionalRule: "Required when Deposit amount = Partial.", category: "directDeposit", description: "Partial deposit amount value." },
+  { key: "ddPartialAmountType", label: "Partial Amount Type", order: 58, required: "conditional", conditionalRule: "Required when Deposit amount = Partial.", allowedValues: ["Full Dollar", "Percentage"], category: "directDeposit", description: "Full Dollar or Percentage." },
   { key: "form2020W4", label: "2020 Form W-4", order: 59, required: "optional", allowedValues: YN, description: "Y if on the 2020+ W-4 form." },
   { key: "fedMultipleJob", label: "Fed Multiple Job", order: 60, required: "optional", allowedValues: YN, description: "Federal multiple-jobs flag." },
   { key: "fedDependentCredit", label: "Fed Dependent Credit", order: 61, required: "optional", description: "Federal dependent credit $ amount." },

@@ -10,7 +10,7 @@ import { recordsToCsv } from "@/lib/csv-export";
 
 export default function PreviewPage() {
   const router = useRouter();
-  const { state } = useWorkflow();
+  const { state, setCellOverride, clearCellOverride } = useWorkflow();
   const parsed = state.parsed;
 
   const result = useMemo(() => {
@@ -19,8 +19,9 @@ export default function PreviewPage() {
       rows: parsed.rows,
       columnMapping: state.columnMapping,
       valueMapping: state.valueMapping,
+      cellOverrides: state.cellOverrides,
     });
-  }, [parsed, state.columnMapping, state.valueMapping]);
+  }, [parsed, state.columnMapping, state.valueMapping, state.cellOverrides]);
 
   if (!parsed) {
     return (
@@ -90,7 +91,13 @@ export default function PreviewPage() {
         </div>
       </section>
 
-      <PreviewTable records={records} issues={issues} />
+      <PreviewTable
+        records={records}
+        issues={issues}
+        overrides={state.cellOverrides}
+        onSetOverride={setCellOverride}
+        onClearOverride={clearCellOverride}
+      />
     </div>
   );
 }

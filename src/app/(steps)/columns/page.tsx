@@ -96,8 +96,7 @@ export default function ColumnsPage() {
     const mapped = groupFields.filter(
       (f) =>
         state.columnMapping[f.key]?.source === "column" ||
-        state.columnMapping[f.key]?.source === "constant" ||
-        state.columnMapping[f.key]?.source === "dynamic",
+        state.columnMapping[f.key]?.source === "constant",
     ).length;
     return {
       group: g,

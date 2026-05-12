@@ -3,8 +3,11 @@ import type { NetchexFieldKey } from "./netchex-spec";
 export type ColumnMappingEntry =
   | { source: "column"; column: string }
   | { source: "constant"; value: string }
-  | { source: "dynamic"; pool: string; value: string }
   | { source: "unmapped" };
+
+// rowIndex -> fieldKey -> overridden value. Set from the Preview screen's
+// inline cell editor; wins over column/value mapping when present.
+export type CellOverrides = Record<number, Record<string, string>>;
 
 export type ColumnMapping = Record<string, ColumnMappingEntry>;
 

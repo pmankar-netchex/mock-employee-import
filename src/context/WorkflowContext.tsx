@@ -9,6 +9,7 @@ import {
 } from "react";
 import { suggestMapping } from "@/lib/suggest-mapping";
 import type {
+  CellOverrides,
   ColumnMapping,
   ColumnMappingEntry,
   ValueMapping,
@@ -28,6 +29,7 @@ type WorkflowState = {
   parsed: ParsedFile | null;
   columnMapping: ColumnMapping;
   valueMapping: ValueMapping;
+  cellOverrides: CellOverrides;
 };
 
 type WorkflowContextValue = {
@@ -36,6 +38,8 @@ type WorkflowContextValue = {
   updateMapping: (fieldKey: string, entry: ColumnMappingEntry) => void;
   setValue: (fieldKey: string, clientValue: string, netchexValue: string) => void;
   setValuesForField: (fieldKey: string, mapping: Record<string, string>) => void;
+  setCellOverride: (rowIndex: number, fieldKey: string, value: string) => void;
+  clearCellOverride: (rowIndex: number, fieldKey: string) => void;
   reset: () => void;
 };
 
@@ -45,6 +49,7 @@ const initialState: WorkflowState = {
   parsed: null,
   columnMapping: {},
   valueMapping: {},
+  cellOverrides: {},
 };
 
 export function WorkflowProvider({ children }: { children: React.ReactNode }) {
@@ -56,6 +61,7 @@ export function WorkflowProvider({ children }: { children: React.ReactNode }) {
       parsed,
       columnMapping: autoMapping,
       valueMapping: {},
+      cellOverrides: {},
     });
   }, []);
 
@@ -110,6 +116,34 @@ export function WorkflowProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const setCellOverride = useCallback(
+    (rowIndex: number, fieldKey: string, value: string) => {
+      setState((prev) => {
+        const rowOverrides = { ...(prev.cellOverrides[rowIndex] ?? {}) };
+        rowOverrides[fieldKey] = value;
+        return {
+          ...prev,
+          cellOverrides: { ...prev.cellOverrides, [rowIndex]: rowOverrides },
+        };
+      });
+    },
+    [],
+  );
+
+  const clearCellOverride = useCallback(
+    (rowIndex: number, fieldKey: string) => {
+      setState((prev) => {
+        const rowOverrides = { ...(prev.cellOverrides[rowIndex] ?? {}) };
+        delete rowOverrides[fieldKey];
+        const nextOverrides = { ...prev.cellOverrides };
+        if (Object.keys(rowOverrides).length === 0) delete nextOverrides[rowIndex];
+        else nextOverrides[rowIndex] = rowOverrides;
+        return { ...prev, cellOverrides: nextOverrides };
+      });
+    },
+    [],
+  );
+
   const reset = useCallback(() => setState(initialState), []);
 
   const value = useMemo(
@@ -119,9 +153,20 @@ export function WorkflowProvider({ children }: { children: React.ReactNode }) {
       updateMapping,
       setValue,
       setValuesForField,
+      setCellOverride,
+      clearCellOverride,
       reset,
     }),
-    [state, setParsed, updateMapping, setValue, setValuesForField, reset],
+    [
+      state,
+      setParsed,
+      updateMapping,
+      setValue,
+      setValuesForField,
+      setCellOverride,
+      clearCellOverride,
+      reset,
+    ],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

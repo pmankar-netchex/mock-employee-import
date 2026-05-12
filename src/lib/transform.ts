@@ -7,6 +7,7 @@ import {
   splitPhone,
 } from "./formatters";
 import type {
+  CellOverrides,
   ColumnMapping,
   NetchexRecord,
   TransformResult,
@@ -43,7 +44,6 @@ function rawCell(
   const entry = mapping[key];
   if (!entry || entry.source === "unmapped") return "";
   if (entry.source === "constant") return entry.value;
-  if (entry.source === "dynamic") return entry.value;
   const v = row[entry.column];
   if (v == null) return "";
   if (v instanceof Date) return v.toISOString();
@@ -65,9 +65,11 @@ export function transform(input: {
   rows: Record<string, unknown>[];
   columnMapping: ColumnMapping;
   valueMapping?: ValueMapping;
+  cellOverrides?: CellOverrides;
 }): TransformResult {
   const { rows, columnMapping } = input;
   const valueMapping = input.valueMapping ?? {};
+  const overrides = input.cellOverrides ?? {};
   const records: NetchexRecord[] = [];
   const issues: ValidationIssue[] = [];
 
@@ -119,6 +121,15 @@ export function transform(input: {
     // combined column or arrives as 10 digits, split into the two output cols.
     splitIfNeeded(record, "areaCode", "phoneNumber");
     splitIfNeeded(record, "cellPhoneAreaCode", "cellPhoneNumber");
+
+    // Apply per-cell overrides last — they're explicit user fixes from the
+    // Preview screen and should win over everything else.
+    const rowOverrides = overrides[i];
+    if (rowOverrides) {
+      for (const [k, v] of Object.entries(rowOverrides)) {
+        record[k as NetchexFieldKey] = v;
+      }
+    }
 
     // Validate required fields (non-conditional).
     for (const field of NETCHEX_FIELDS) {

@@ -7,7 +7,8 @@ import {
   groupForOrder,
   type FieldGroup,
 } from "@/lib/netchex-spec";
-import type { NetchexRecord, ValidationIssue } from "@/lib/types";
+import type { CellOverrides, NetchexRecord, ValidationIssue } from "@/lib/types";
+import { EditableCell } from "./EditableCell";
 
 type GroupTab = "All" | FieldGroup;
 
@@ -16,9 +17,15 @@ type RowFilter = "all" | "errors" | "warnings" | "ready";
 export function PreviewTable({
   records,
   issues,
+  overrides,
+  onSetOverride,
+  onClearOverride,
 }: {
   records: NetchexRecord[];
   issues: ValidationIssue[];
+  overrides: CellOverrides;
+  onSetOverride: (rowIndex: number, fieldKey: string, value: string) => void;
+  onClearOverride: (rowIndex: number, fieldKey: string) => void;
 }) {
   const [group, setGroup] = useState<GroupTab>("All");
   const [rowFilter, setRowFilter] = useState<RowFilter>("all");
@@ -60,14 +67,27 @@ export function PreviewTable({
 
   if (records.length === 0) return null;
 
+  const overrideCount = Object.values(overrides).reduce(
+    (n, row) => n + Object.keys(row).length,
+    0,
+  );
+
   return (
     <section className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
       <div className="px-5 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between flex-wrap gap-3">
         <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
           Preview · {visibleRows.length}/{records.length} rows ·{" "}
           {visibleFields.length}/{NETCHEX_FIELDS.length} columns
+          {overrideCount > 0 && (
+            <span className="ml-3 text-xs font-normal text-emerald-700 dark:text-emerald-400">
+              ● {overrideCount} cell{overrideCount === 1 ? "" : "s"} overridden
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-500 hidden sm:inline">
+            Click any cell to edit · changes apply to that row only
+          </span>
           <select
             value={rowFilter}
             onChange={(e) => setRowFilter(e.target.value as RowFilter)}
@@ -131,20 +151,36 @@ export function PreviewTable({
                 </td>
                 {visibleFields.map((f) => {
                   const issue = issueIndex.get(`${originalIndex}:${f.key}`);
-                  const cls = issue
-                    ? issue.severity === "error"
-                      ? "bg-red-50 dark:bg-red-900/30 text-red-900 dark:text-red-200"
-                      : "bg-amber-50 dark:bg-amber-900/30 text-amber-900 dark:text-amber-200"
-                    : "";
+                  const overridden =
+                    overrides[originalIndex]?.[f.key] !== undefined;
+                  if (f.isSpacer) {
+                    return (
+                      <td
+                        key={f.key}
+                        className="px-2 py-1 border-l border-zinc-100 dark:border-zinc-800 text-zinc-300 dark:text-zinc-700"
+                      >
+                        —
+                      </td>
+                    );
+                  }
                   return (
                     <td
                       key={f.key}
-                      className={`px-2 py-1 whitespace-nowrap border-l border-zinc-100 dark:border-zinc-800 ${cls}`}
-                      title={issue?.message}
+                      className="p-0 align-stretch border-zinc-100 dark:border-zinc-800"
                     >
-                      {rec[f.key] || (
-                        <span className="text-zinc-300 dark:text-zinc-700">—</span>
-                      )}
+                      <EditableCell
+                        field={f}
+                        value={rec[f.key] ?? ""}
+                        overridden={overridden}
+                        issueMessage={issue?.message}
+                        severity={issue?.severity}
+                        onCommit={(v) =>
+                          onSetOverride(originalIndex, f.key, v)
+                        }
+                        onClear={() =>
+                          onClearOverride(originalIndex, f.key)
+                        }
+                      />
                     </td>
                   );
                 })}

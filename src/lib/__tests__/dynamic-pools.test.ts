@@ -26,16 +26,12 @@ describe("dynamic pools", () => {
   });
 });
 
-describe("transform with dynamic mapping source", () => {
-  it("applies the dynamic value to every row", () => {
+describe("Constant value picks from a Netchex pool", () => {
+  it("applies the constant pool value to every row", () => {
     const mapping: ColumnMapping = {
       firstName: { source: "column", column: "FN" },
       lastName: { source: "column", column: "LN" },
-      payrollGroupCode: {
-        source: "dynamic",
-        pool: "payroll-group-codes",
-        value: "BiWklyHrly",
-      },
+      payrollGroupCode: { source: "constant", value: "BiWklyHrly" },
     };
     const { records } = transform({
       rows: [
@@ -46,6 +42,37 @@ describe("transform with dynamic mapping source", () => {
     });
     expect(records[0].payrollGroupCode).toBe("BiWklyHrly");
     expect(records[1].payrollGroupCode).toBe("BiWklyHrly");
+  });
+});
+
+describe("cell overrides win over computed values", () => {
+  it("applies an override to a single row", () => {
+    const mapping: ColumnMapping = {
+      firstName: { source: "column", column: "FN" },
+      lastName: { source: "column", column: "LN" },
+    };
+    const { records } = transform({
+      rows: [
+        { FN: "Alice", LN: "Smith" },
+        { FN: "Bob", LN: "Jones" },
+      ],
+      columnMapping: mapping,
+      cellOverrides: { 1: { firstName: "Robert" } },
+    });
+    expect(records[0].firstName).toBe("Alice");
+    expect(records[1].firstName).toBe("Robert");
+  });
+
+  it("overrides bypass formatters (user input is authoritative)", () => {
+    const mapping: ColumnMapping = {
+      ssn: { source: "column", column: "S" },
+    };
+    const { records } = transform({
+      rows: [{ S: "123456789" }],
+      columnMapping: mapping,
+      cellOverrides: { 0: { ssn: "999-99-9999" } },
+    });
+    expect(records[0].ssn).toBe("999-99-9999");
   });
 });
 

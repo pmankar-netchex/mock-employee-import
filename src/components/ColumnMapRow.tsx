@@ -6,7 +6,7 @@ import type { ColumnMapping, ColumnMappingEntry } from "@/lib/types";
 import { getPool } from "@/lib/dynamic-pools";
 import { Combobox, type ComboboxOption } from "./Combobox";
 
-type Mode = "column" | "constant" | "dynamic" | "unmapped";
+type Mode = "column" | "constant" | "unmapped";
 
 export function ColumnMapRow({
   field,
@@ -33,10 +33,6 @@ export function ColumnMapRow({
 
   const selectedColumn = entry?.source === "column" ? entry.column : "";
   const constantValue = entry?.source === "constant" ? entry.value : "";
-  const dynamicPoolId = entry?.source === "dynamic" ? entry.pool : (field.dynamicPools?.[0] ?? "");
-  const dynamicValue = entry?.source === "dynamic" ? entry.value : "";
-
-  const hasDynamic = !!field.dynamicPools && field.dynamicPools.length > 0;
 
   const samples = useMemo(() => {
     if (mode !== "column" || !selectedColumn) return [];
@@ -50,11 +46,8 @@ export function ColumnMapRow({
     } else if (next === "column") {
       const top = rankedColumns.find((r) => !!r.column);
       onChange({ source: "column", column: top?.column ?? clientHeaders[0] ?? "" });
-    } else if (next === "constant") {
+    } else {
       onChange({ source: "constant", value: "" });
-    } else if (next === "dynamic") {
-      const firstPool = field.dynamicPools?.[0] ?? "";
-      onChange({ source: "dynamic", pool: firstPool, value: "" });
     }
   }
 
@@ -77,15 +70,35 @@ export function ColumnMapRow({
     return opts;
   }, [clientHeaders, rankedColumns]);
 
-  const dynamicPool = useMemo(() => getPool(dynamicPoolId), [dynamicPoolId]);
-  const dynamicOptions = useMemo<ComboboxOption[]>(() => {
-    if (!dynamicPool) return [];
-    return dynamicPool.options.map((o) => ({
-      value: o.code,
-      label: o.label ?? o.code,
-      hint: o.description,
-    }));
-  }, [dynamicPool]);
+  // Constant-mode input shape derives from the field metadata: pool combobox
+  // when a Netchex pool is attached, enum combobox when allowedValues exist,
+  // else free text.
+  const constantInput = useMemo(() => {
+    if (field.dynamicPools && field.dynamicPools.length > 0) {
+      const opts: ComboboxOption[] = [];
+      for (const id of field.dynamicPools) {
+        const pool = getPool(id);
+        if (!pool) continue;
+        for (const o of pool.options) {
+          opts.push({
+            value: o.code,
+            label: o.label ?? o.code,
+            group: pool.label,
+            hint: o.description,
+          });
+        }
+      }
+      return { kind: "combobox" as const, options: opts, placeholder: "— pick from Netchex —" };
+    }
+    if (field.allowedValues && field.allowedValues.length > 0) {
+      return {
+        kind: "combobox" as const,
+        options: field.allowedValues.map((v) => ({ value: v })),
+        placeholder: "— pick allowed value —",
+      };
+    }
+    return { kind: "freeText" as const };
+  }, [field.dynamicPools, field.allowedValues]);
 
   const requirementBadge = field.required === "required"
     ? <span className="rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 px-1.5 py-0.5 text-[10px] font-medium">REQUIRED</span>
@@ -111,9 +124,11 @@ export function ColumnMapRow({
             allowed: {field.allowedValues.join(", ")}
           </div>
         )}
-        {hasDynamic && (
+        {field.dynamicPools && field.dynamicPools.length > 0 && (
           <div className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1">
-            Dynamic: {field.dynamicPools!.join(", ")}
+            Netchex pool: {field.dynamicPools
+              .map((id) => getPool(id)?.label ?? id)
+              .join(", ")}
           </div>
         )}
       </div>
@@ -125,7 +140,6 @@ export function ColumnMapRow({
       >
         <option value="column">From column</option>
         <option value="constant">Constant value</option>
-        {hasDynamic && <option value="dynamic">Dynamic value</option>}
         <option value="unmapped">Leave blank</option>
       </select>
 
@@ -161,60 +175,33 @@ export function ColumnMapRow({
         )}
         {mode === "constant" && (
           <>
-            <input
-              type="text"
-              value={constantValue}
-              onChange={(e) =>
-                onChange({ source: "constant", value: e.target.value })
-              }
-              placeholder="Value applied to every row"
-              className="w-full rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-1 text-sm"
-            />
+            {constantInput.kind === "combobox" ? (
+              <Combobox
+                value={constantValue}
+                options={constantInput.options}
+                placeholder={constantInput.placeholder}
+                emptyText="No options."
+                onChange={(v) =>
+                  onChange({ source: "constant", value: v })
+                }
+                onClear={() => onChange({ source: "constant", value: "" })}
+              />
+            ) : (
+              <input
+                type="text"
+                value={constantValue}
+                onChange={(e) =>
+                  onChange({ source: "constant", value: e.target.value })
+                }
+                placeholder="Value applied to every row"
+                className="w-full rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-1 text-sm"
+              />
+            )}
             {constantValue && (
               <div className="mt-1.5 text-[11px] text-zinc-500">
                 applied to all {totalRows} row{totalRows === 1 ? "" : "s"}
               </div>
             )}
-          </>
-        )}
-        {mode === "dynamic" && (
-          <>
-            {field.dynamicPools && field.dynamicPools.length > 1 && (
-              <select
-                value={dynamicPoolId}
-                onChange={(e) =>
-                  onChange({
-                    source: "dynamic",
-                    pool: e.target.value,
-                    value: "",
-                  })
-                }
-                className="mb-2 w-full rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2 py-1 text-xs"
-              >
-                {field.dynamicPools.map((p) => {
-                  const pool = getPool(p);
-                  return (
-                    <option key={p} value={p}>
-                      {pool?.label ?? p}
-                    </option>
-                  );
-                })}
-              </select>
-            )}
-            <Combobox
-              value={dynamicValue}
-              options={dynamicOptions}
-              placeholder={`Pick from ${dynamicPool?.label ?? "pool"}…`}
-              emptyText="No options in this pool."
-              onChange={(v) =>
-                onChange({ source: "dynamic", pool: dynamicPoolId, value: v })
-              }
-            />
-            <div className="mt-1.5 text-[11px] text-zinc-500">
-              {dynamicValue
-                ? `applied to all ${totalRows} row${totalRows === 1 ? "" : "s"}`
-                : `from ${dynamicPool?.label ?? "Netchex pool"}`}
-            </div>
           </>
         )}
         {mode === "unmapped" && (
